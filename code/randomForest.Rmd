@@ -12,6 +12,8 @@ library(rpart)
 library(rpart.plot)
 library(randomForest)
 library(dplyr)
+library(ggplot2)
+source("TC.R")
 ```
 
 ## Summary Statistics
@@ -47,7 +49,7 @@ ggplot(data = drug_cons_num, aes(x = choc, y = age)) +
 corrplot(cor(drug_cons_num[, 6:10]))
 ```
 
-## Random Forest
+## Random Forest (Numeric Age and Education)  
 
 ```{r}
 set.seed(432)
@@ -139,7 +141,7 @@ choc_rf_tuned <- randomForest(choc ~ ., data = drug_cons_num,
                               importance = TRUE)
 choc_rf_tuned
 
-choc_rf_tuned_confmat <- choc_rf_tuned$confusion[, -8]
+choc_rf_tuned_confmat <- t(choc_rf_tuned$confusion[, -8])
 choc_rf_tuned_oober <- as.vector(choc_rf_tuned$err.rate[nrow(choc_rf_tuned$err.rate), "OOB"])
 ```
 
@@ -147,8 +149,13 @@ choc_rf_tuned_oober <- as.vector(choc_rf_tuned$err.rate[nrow(choc_rf_tuned$err.r
 choc_rf_tuned$importance
 ```
 
+```{r}
+choc_rf_tuned_confmat
+TC(choc_rf_tuned_confmat)
+```
 
-## Bagging  
+
+## Bagging (Numeric Age and Education)  
 
 ```{r}
 set.seed(432)
@@ -227,11 +234,220 @@ choc_bag_tuned <- randomForest(choc ~ ., data = drug_cons_num,
                               importance = TRUE)
 choc_bag_tuned
 
-choc_bag_tuned_confmat <- choc_bag_tuned$confusion[, -8]
+choc_bag_tuned_confmat <- t(choc_bag_tuned$confusion[, -8])
 choc_bag_tuned_oober <- as.vector(choc_bag_tuned$err.rate[nrow(choc_bag_tuned$err.rate), "OOB"])
 ```
 
 ```{r}
 choc_bag_tuned$importance
+```
+
+```{r}
+choc_bag_tuned_confmat
+TC(choc_bag_tuned_confmat)
+```
+
+## Random Forest (Factor Age and Education)
+
+```{r}
+drug_cons_num$age <- as.factor(drug_cons_num$age)
+drug_cons_num$education <- as.factor(drug_cons_num$education)
+
+summary(drug_cons_num)
+```
+
+```{r}
+set.seed(432)
+
+# Using default parameter values: 
+choc_rf_default_f <- randomForest(choc ~ ., data = drug_cons_num, importance = TRUE)
+choc_rf_default_f
+
+choc_rf_def_f_confmat <- choc_rf_default_f$confusion[, -8]
+choc_rf_def_f_oober <- as.vector(choc_rf_default_f$err.rate[nrow(choc_rf_default_f$err.rate), "OOB"])
+```
+
+```{r}
+tuning_par3 <- expand.grid("ntree" = seq(from = 100, to = 1000, by = 50), 
+                           "nodesize" = seq(from = 1, to = 10, by = 1), 
+                           "mtry" = seq(from = 1, to = 10, by = 1))
+
+OOB_error_f_rf <- rep(NA, nrow(tuning_par3))
+```
+
+```{r}
+set.seed(432)
+
+# Tuning the ntree, mtry, and nodesize parameters:
+
+for (k in seq_along(OOB_error_f_rf)) {
+  choc_rf <- randomForest(choc ~ ., data = drug_cons_num, 
+                          ntree = tuning_par3$ntree[k], 
+                          nodesize = tuning_par3$nodesize[k], 
+                          mtry = tuning_par3$mtry[k])
+  OOB_error_f_rf[k] <- as.vector(choc_rf$err.rate[nrow(choc_rf$err.rate), "OOB"])
+}
+
+rf_f_tune <- cbind(tuning_par3, OOB_error_f_rf)
+```
+
+```{r}
+rf_f_best <- rf_f_tune[which.min(rf_f_tune$OOB_error_f_rf), ]
+rf_f_best
+```
+
+```{r}
+rf_f_tune_mtry <- rf_f_tune %>% group_by(mtry)  %>%
+                    summarise(mean_oober = mean(OOB_error_f_rf), .groups = 'drop')
+
+ggplot(data = rf_f_tune, aes(x = mtry, y = OOB_error_f_rf)) + 
+  geom_point(alpha = 0.3, color = "darkgreen") + 
+  ggtitle("Number of Variables Sampled at Each Split (mtry) vs. OOB Error") + 
+  xlab("Number of Variables Randomly Sampled at Each Split") + 
+  ylab("Out-Of-Bag Error Rate") + 
+  scale_x_continuous(breaks = seq(from = 1, to = 10, by = 1)) + 
+  geom_point(data = rf_f_tune_mtry, aes(x = mtry, y = mean_oober), color = "black", size = 4, alpha = 0.3)
+```
+
+```{r}
+rf_f_tune_nodesize <- rf_f_tune %>% group_by(nodesize)  %>%
+                    summarise(mean_oober = mean(OOB_error_f_rf), .groups = 'drop')
+
+ggplot(data = rf_f_tune, aes(x = nodesize, y = OOB_error_f_rf)) + 
+  geom_point(alpha = 0.3, color = "maroon") + 
+  ggtitle("Minimum Size of Terminal Nodes (nodesize) vs. OOB Error") + 
+  xlab("Minimum Size of Terminal Nodes") + 
+  ylab("Out-Of-Bag Error Rate") + 
+  scale_x_continuous(breaks = seq(from = 1, to = 10, by = 1)) + 
+  geom_point(data = rf_f_tune_nodesize, aes(x = nodesize, y = mean_oober), color = "black", size = 4, alpha = 0.3)
+```
+
+```{r}
+rf_f_tune_ntree <- rf_f_tune %>% group_by(ntree)  %>%
+                    summarise(mean_oober = mean(OOB_error_f_rf), .groups = 'drop')
+
+ggplot(data = rf_f_tune, aes(x = ntree, y = OOB_error_f_rf)) + 
+  geom_point(alpha = 0.3, color = "darkblue") + 
+  ggtitle("Number of Trees (ntree) vs. OOB Error") + 
+  xlab("Number of Trees") + 
+  ylab("Out-Of-Bag Error Rate") + 
+  scale_x_continuous(breaks = seq(from = 100, to = 1000, by = 50)) + 
+  geom_point(data = rf_f_tune_ntree, aes(x = ntree, y = mean_oober), color = "black", size = 4, alpha = 0.3)
+```
+
+```{r}
+set.seed(432)
+
+# Tuned random forest model 
+choc_rf_f_tuned <- randomForest(choc ~ ., data = drug_cons_num, 
+                              ntree =  rf_f_best$ntree,
+                              nodesize = rf_f_best$nodesize,
+                              mtry = rf_f_best$mtry, 
+                              importance = TRUE)
+choc_rf_f_tuned
+
+choc_rf_f_tuned_confmat <- t(choc_rf_f_tuned$confusion[, -8])
+choc_rf_f_tuned_oober <- as.vector(choc_rf_f_tuned$err.rate[nrow(choc_rf_f_tuned$err.rate), "OOB"])
+```
+
+```{r}
+choc_rf_f_tuned$importance
+```
+
+```{r}
+choc_rf_f_tuned_confmat
+TC(choc_rf_f_tuned_confmat)
+```
+
+## Bagging (Factor Age and Education)
+
+```{r}
+set.seed(432)
+
+# Using default parameter values: 
+choc_bag_default_f <- randomForest(choc ~ ., data = drug_cons_num, mtry = 10, 
+                                 importance = TRUE)
+choc_bag_default_f
+
+choc_bag_def_f_confmat <- choc_bag_default_f$confusion[, -8]
+choc_bag_def_f_oober <- as.vector(choc_bag_default_f$err.rate[nrow(choc_bag_default_f$err.rate), "OOB"])
+```
+
+```{r}
+tuning_par4 <- expand.grid("ntree" = seq(from = 100, to = 1500, by = 50), 
+                         "nodesize" = seq(from = 1, to = 20, by = 1))
+
+OOB_error_f_bag <- rep(NA, nrow(tuning_par4))
+```
+
+```{r}
+set.seed(432)
+
+# Tuning the ntree and nodesize parameters:
+
+for (k in seq_along(OOB_error_f_bag)) {
+  choc_bag <- randomForest(choc ~ ., data = drug_cons_num, 
+                          ntree = tuning_par4$ntree[k], 
+                          nodesize = tuning_par4$nodesize[k], 
+                          mtry = 10)
+  OOB_error_f_bag[k] <- as.vector(choc_bag$err.rate[nrow(choc_bag$err.rate), "OOB"])
+}
+
+bag_f_tune <- cbind(tuning_par4, OOB_error_f_bag)
+```
+
+```{r}
+bag_f_best <- bag_f_tune[which.min(bag_f_tune$OOB_error_f_bag), ]
+bag_f_best
+```
+
+```{r}
+bag_f_tune_nodesize <- bag_f_tune %>% group_by(nodesize)  %>%
+                    summarise(mean_oober = mean(OOB_error_f_bag), .groups = 'drop')
+
+ggplot(data = bag_f_tune, aes(x = nodesize, y = OOB_error_f_bag)) + 
+  geom_point(alpha = 0.3, color = "maroon") + 
+  ggtitle("Minimum Size of Terminal Nodes (nodesize) vs. OOB Error") + 
+  xlab("Minimum Size of Terminal Nodes") + 
+  ylab("Out-Of-Bag Error Rate") + 
+  scale_x_continuous(breaks = seq(from = 1, to = 20, by = 1)) + 
+  geom_point(data = bag_f_tune_nodesize, aes(x = nodesize, y = mean_oober), color = "black", size = 4, alpha = 0.3)
+```
+
+```{r}
+bag_f_tune_ntree <- bag_f_tune %>% group_by(ntree)  %>%
+                    summarise(mean_oober = mean(OOB_error_f_bag), .groups = 'drop')
+
+ggplot(data = bag_f_tune, aes(x = ntree, y = OOB_error_f_bag)) + 
+  geom_point(alpha = 0.3, color = "darkblue") + 
+  ggtitle("Number of Trees (ntree) vs. OOB Error") + 
+  xlab("Number of Trees") + 
+  ylab("Out-Of-Bag Error Rate") + 
+  scale_x_continuous(breaks = seq(from = 100, to = 1500, by = 100)) + 
+  geom_point(data = bag_f_tune_ntree, aes(x = ntree, y = mean_oober), color = "black", size = 4, alpha = 0.3)
+```
+
+```{r}
+set.seed(432)
+
+# Tuned bagging model 
+choc_bag_f_tuned <- randomForest(choc ~ ., data = drug_cons_num, 
+                                 ntree =  bag_f_best$ntree,
+                                 nodesize = bag_f_best$nodesize,
+                                 mtry = 10, 
+                                 importance = TRUE)
+choc_bag_f_tuned
+
+choc_bag_f_tuned_confmat <- t(choc_bag_f_tuned$confusion[, -8])
+choc_bag_f_tuned_oober <- as.vector(choc_bag_f_tuned$err.rate[nrow(choc_bag_f_tuned$err.rate), "OOB"])
+```
+
+```{r}
+choc_bag_f_tuned$importance
+```
+
+```{r}
+choc_bag_f_tuned_confmat
+TC(choc_bag_f_tuned_confmat)
 ```
 
