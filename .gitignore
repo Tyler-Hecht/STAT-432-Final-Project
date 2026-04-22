@@ -1,4 +1,5 @@
 code/visualize_targets.ipynb
 code/check_data.ipynb
-testing
 **/__pycache__
+**/.RData
+**/.Rhistory
