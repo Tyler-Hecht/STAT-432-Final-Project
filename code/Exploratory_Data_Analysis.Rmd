@@ -1,0 +1,129 @@
+---
+title: "Exploratory_Data_Analysis"
+output: pdf_document
+date: "2026-04-24"
+---
+
+## Class Distribution of Chocaolate Consumption
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+df <- read.csv("drug_consumption_numeric.csv")
+
+ggplot(df, aes(x = choc, fill = choc)) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5) +
+  labs(title = "Class Distribution of Chocolate Consumption",
+       x = "Class", y = "Count") +
+  theme_minimal()
+```
+
+## Personality Score Distributions by Class
+
+```{r}
+library(psych)
+describe(df[, c("nscore", "escore", "oscore", "ascore", "cscore")])[, c("mean", "sd", "min", "max", "skew")]
+```
+
+
+```{r}
+library(tidyr)
+
+df_long <- df %>%
+  pivot_longer(cols = c(nscore, escore, oscore, ascore, cscore),
+               names_to = "trait", values_to = "score")
+
+ggplot(df_long, aes(x = choc, y = score, fill = choc)) +
+  geom_boxplot() +
+  facet_wrap(~ trait, scales = "free_y") +
+  labs(title = "Personality Scores by Consumption Class") +
+  theme_minimal()
+```
+
+## Correlation Heatmap of Personality Scores 
+
+```{r}
+library(corrplot)
+cor_matrix <- cor(df[, c("nscore","escore","oscore","ascore","cscore")])
+
+par(mar = c(2, 2, 4, 2))
+
+corrplot(cor_matrix, method = "color",
+         addCoef.col = "black", tl.col = "black",
+         title = "Personality Score Correlations",
+         mar = c(1, 1, 2, 1))
+```
+
+
+## Categorical Features 
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+df$choc <- factor(df$choc, levels = c("CL0","CL1","CL2","CL3","CL4","CL5","CL6"))
+
+cat_features <- c("gender", "country", "ethnicity", "age", "education")
+
+for (feat in cat_features) {
+  p <- df %>%
+    mutate(feature = as.factor(.data[[feat]])) %>%
+    group_by(feature, choc) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(feature) %>%
+    mutate(prop = n / sum(n)) %>%
+    ggplot(aes(x = feature, y = prop, fill = choc)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(title = paste("Chocolate Consumption Class by", feat),
+         x = feat, y = "Proportion", fill = "Class") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+}
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+df$choc <- factor(df$choc, levels = c("CL0","CL1","CL2","CL3","CL4","CL5","CL6"))
+
+plot_proportion <- function(data, feat) {
+  data %>%
+    mutate(feature = as.factor(.data[[feat]])) %>%
+    group_by(feature, choc) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(feature) %>%
+    mutate(prop = n / sum(n)) %>%
+    ggplot(aes(x = feature, y = prop, fill = choc)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(title = paste("Class by", feat), x = feat, y = "Proportion", fill = "Class") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "none")  # remove individual legends
+}
+
+p1 <- plot_proportion(df, "gender")
+p2 <- plot_proportion(df, "age")
+p3 <- plot_proportion(df, "country")
+p4 <- plot_proportion(df, "education")
+
+legend <- cowplot::get_legend(
+  plot_proportion(df, "gender") + theme(legend.position = "right")
+)
+
+# Arrange in 2x2 with shared legend
+cowplot::plot_grid(
+  cowplot::plot_grid(p1, p2, p3, p4, ncol = 2),
+  legend,
+  rel_widths = c(1, 0.15)
+)
+```
+
