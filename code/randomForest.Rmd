@@ -29,26 +29,6 @@ drug_cons_num$choc <- as.factor(drug_cons_num$choc)
 summary(drug_cons_num)
 ```
 
-```{r}
-ggplot(data = drug_cons_num, aes(x = choc, group = gender, color = gender, fill = gender)) + 
-  geom_bar(position = "dodge", alpha = 0.7) + 
-  ggtitle("Frequency of Chocolate Consumption by Gender") + 
-  ylab("Frequency") + 
-  xlab("Chocolate Consumption")
-```
-
-```{r}
-ggplot(data = drug_cons_num, aes(x = choc, y = age)) + 
-  geom_jitter(width = 0.25, height = 0.25, alpha = 0.4, color = "purple") + 
-  ggtitle("Chocolate Consumption by Age") + 
-  ylab("Age Level") + 
-  xlab("Chocolate Consumption")
-```
-
-```{r}
-corrplot(cor(drug_cons_num[, 6:10]))
-```
-
 ## Random Forest (Numeric Age and Education)  
 
 ```{r}
@@ -153,6 +133,10 @@ choc_rf_tuned_confmat
 TC(choc_rf_tuned_confmat)
 ```
 
+```{r}
+write.csv(choc_rf_tuned$predicted, "randomForest_numericInput_predictions.csv", row.names = FALSE)
+```
+
 
 ## Bagging (Numeric Age and Education)  
 
@@ -243,6 +227,10 @@ choc_bag_tuned$importance
 ```{r}
 choc_bag_tuned_confmat
 TC(choc_bag_tuned_confmat)
+```
+
+```{r}
+write.csv(choc_bag_tuned$predicted, "bagging_numericInput_predictions.csv", row.names = FALSE)
 ```
 
 ## Random Forest (Factor Age and Education)
@@ -356,6 +344,10 @@ choc_rf_f_tuned_confmat
 TC(choc_rf_f_tuned_confmat)
 ```
 
+```{r}
+write.csv(choc_rf_f_tuned$predicted, "randomForest_factorInput_predictions.csv", row.names = FALSE)
+```
+
 ## Bagging (Factor Age and Education)
 
 ```{r}
@@ -445,5 +437,9 @@ choc_bag_f_tuned$importance
 ```{r}
 choc_bag_f_tuned_confmat
 TC(choc_bag_f_tuned_confmat)
+```
+
+```{r}
+write.csv(choc_bag_f_tuned$predicted, "bagging_factorInput_predictions.csv", row.names = FALSE)
 ```
 
