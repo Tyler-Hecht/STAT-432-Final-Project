@@ -1,0 +1,98 @@
+```{r}
+library(this.path)
+library(ordinalNet)
+source("TC.R")
+
+setwd(this.path::here())
+
+CATEGORICAL_FILE = "../data/drug_consumption_transformed.csv"
+NUMERICAL_FILE = "../data/drug_consumption_numeric.csv"
+
+OUTPUT_CAT = "../data/ordered_logistic/pred_cat.csv"
+OUTPUT_NUM = "../data/ordered_logistic/pred_num.csv"
+
+df_cat = read.csv(CATEGORICAL_FILE)
+X_cat = df_cat[,-11]
+X_cat = model.matrix(~ age + gender + education + country + ethnicity - 1, X_cat)
+y_cat = df_cat[,11]
+y_cat = as.ordered(y_cat)
+
+df_num = read.csv(NUMERICAL_FILE)
+X_num = df_num[,-11]
+X_num = model.matrix(~ gender + country + ethnicity - 1, X_num)
+y_num = df_num[,11]
+y_num = as.ordered(y_num)
+
+n = nrow(df_cat)
+
+true_values = df_cat$choc
+```
+
+```{r}
+lambdas = rev(c(10**seq(-4, 2, 1/2)))
+L = length(lambdas)
+alphas = seq(0, 1, 0.1)
+A = length(alphas)
+
+set.seed(432)
+nfolds = 5
+folds = split(1:n, sample(rep(1:nfolds, each = n / nfolds)))
+```
+
+```{r}
+pb <- txtProgressBar(min = 0, max = nfolds, style = 3)
+
+folds = split(1:n, sample(rep(1:nfolds, each = n / nfolds)))
+
+pred_cat = array(NA, dim = c(L, A, n))
+for (i in 1:nfolds) {
+  fold = folds[[i]]
+  X_cat_train = X_cat[-fold,]
+  X_cat_test = X_cat[fold,]
+  y_cat_train = y_cat[-fold]
+  for (j in 1:A) {
+    alpha = alphas[j]
+      
+    model = ordinalNet(X_cat_train, y_cat_train, alpha = alpha, lambdaVals = lambdas)
+    for (k in 1:L) {
+      pred = predict(model, newx = X_cat_test, type = "class", whichLambda = k)
+      pred_cat[k,j,fold] = pred
+    }
+  }
+  setTxtProgressBar(pb, i)
+}
+```
+
+```{r}
+pb <- txtProgressBar(min = 0, max = nfolds, style = 3)
+
+pred_num = array(NA, dim = c(L, A, n))
+for (i in 1:nfolds) {
+  fold = folds[[i]]
+  X_num_train = X_num[-fold,]
+  X_num_test = X_num[fold,]
+  y_num_train = y_num[-fold]
+  for (j in 1:A) {
+    alpha = alphas[j]
+      
+    model = ordinalNet(X_num_train, y_num_train, alpha = alpha, lambdaVals = lambdas)
+    for (k in 1:L) {
+      pred = predict(model, newx = X_num_test, type = "class", whichLambda = k)
+      pred_num[k,j,fold] = pred
+    }
+  }
+  setTxtProgressBar(pb, i)
+}
+```
+
+```{r}
+dimnames(pred_cat) = list(lambda = model$lambdaVals, alpha = alphas, i = 1:n)
+dimnames(pred_num) = list(lambda = model$lambdaVals, alpha = alphas, i = 1:n)
+
+pred_cat_long = as.data.frame.table(pred_cat, responseName = "pred")
+pred_num_long = as.data.frame.table(pred_num, responseName = "pred")
+
+write.csv(pred_cat_long, OUTPUT_CAT, row.names = F)
+write.csv(pred_num_long, OUTPUT_NUM, row.names = F)
+```
+
