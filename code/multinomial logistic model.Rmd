@@ -1,0 +1,195 @@
+---
+title: "Untitled"
+author: "Kehuan Wang"
+date: "2026-04-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(glmnet)
+
+input_cat <- "drug_consumption_transformed.csv"
+input_num <- "drug_consumption_numeric.csv"
+
+output_dir <- "data"
+if (!dir.exists(output_dir)) dir.create(output_dir)
+
+class_order <- c("CL0", "CL1", "CL2", "CL3", "CL4", "CL5", "CL6")
+
+alphas <- seq(0, 1, 0.1)
+
+# from large lambda to small lambda
+lambdas <- rev(10^seq(-4, 2, by = 0.5))
+
+nfolds <- 5
+set.seed(432)
+```
+
+```{r}
+encode_response <- function(y) {
+  as.integer(factor(y, levels = class_order, ordered = TRUE)) - 1
+}
+
+make_folds_stratified <- function(y, k) {
+  folds <- integer(length(y))
+  for (cls in unique(y)) {
+    idx <- which(y == cls)
+    folds[idx] <- sample(rep(1:k, length.out = length(idx)))
+  }
+  folds
+}
+```
+
+```{r}
+df_cat <- read.csv(input_cat, stringsAsFactors = TRUE)
+
+y_cat <- encode_response(df_cat$choc)
+
+X_cat <- model.matrix(
+  ~ age + gender + education + country + ethnicity +
+    nscore + escore + oscore + ascore + cscore - 1,
+  df_cat
+)
+
+cat("Categorical data loaded.\n")
+dim(X_cat)
+table(y_cat)
+```
+
+```{r}
+df_num <- read.csv(input_num, stringsAsFactors = TRUE)
+
+y_num <- encode_response(df_num$choc)
+
+X_num <- model.matrix(
+  ~ age + gender + education + country + ethnicity +
+    nscore + escore + oscore + ascore + cscore - 1,
+  df_num
+)
+
+cat("Numeric data loaded.\n")
+dim(X_num)
+table(y_num)
+```
+
+```{r}
+stopifnot(all(y_cat == y_num))
+
+write.csv(
+  data.frame(
+    class = 0:6,
+    label = class_order,
+    count = as.integer(table(factor(y_cat, levels = 0:6)))
+  ),
+  file.path(output_dir, "response_distribution.csv"),
+  row.names = FALSE
+)
+```
+
+```{r}
+run_multinomial <- function(X, y, label) {
+  n <- nrow(X)
+  y_factor <- factor(y, levels = 0:6, labels = class_order)
+  folds <- make_folds_stratified(y, nfolds)
+
+  grid <- expand.grid(alpha = alphas, lambda = lambdas)
+  grid$log10_lambda <- log10(grid$lambda)
+  grid$grid_id <- 0:(nrow(grid) - 1)
+
+  pred_mat <- matrix(NA_integer_, nrow = nrow(grid), ncol = n)
+
+  for (a in seq_along(alphas)) {
+    alpha_g <- alphas[a]
+    grid_idx <- which(grid$alpha == alpha_g)
+
+    for (fold in 1:nfolds) {
+      train_idx <- which(folds != fold)
+      test_idx <- which(folds == fold)
+
+      X_train <- X[train_idx, , drop = FALSE]
+      X_test <- X[test_idx, , drop = FALSE]
+      y_train <- droplevels(y_factor[train_idx])
+
+      fit <- tryCatch(
+        glmnet(
+          x = X_train,
+          y = y_train,
+          family = "multinomial",
+          alpha = alpha_g,
+          lambda = lambdas,
+          standardize = TRUE,
+          maxit = 1e6
+        ),
+        error = function(e) {
+          message(sprintf("glmnet failed for %s | alpha = %.1f | fold = %d",
+                          label, alpha_g, fold))
+          return(NULL)
+        }
+      )
+
+      if (is.null(fit)) next
+
+      pred_array <- predict(
+        fit,
+        newx = X_test,
+        type = "class",
+        s = lambdas
+      )
+
+      if (length(dim(pred_array)) == 3) {
+        for (j in seq_along(lambdas)) {
+          pred_j <- pred_array[, 1, j]
+          pred_j <- as.character(pred_j)
+          pred_mat[grid_idx[j], test_idx] <- match(pred_j, class_order) - 1
+        }
+
+      } else if (is.matrix(pred_array)) {
+        for (j in seq_along(lambdas)) {
+          pred_j <- pred_array[, j]
+          pred_j <- as.character(pred_j)
+          pred_mat[grid_idx[j], test_idx] <- match(pred_j, class_order) - 1
+        }
+
+      } else {
+        stop("Unexpected shape returned by predict().")
+      }
+
+      cat(sprintf("%s | alpha=%.1f | fold %d/%d complete\n",
+                  label, alpha_g, fold, nfolds))
+    }
+  }
+
+  write.csv(
+    data.frame(true = y),
+    file.path(output_dir, paste0("multinomial_true_", label, ".csv")),
+    row.names = FALSE
+  )
+
+  write.csv(
+    grid,
+    file.path(output_dir, paste0("multinomial_grid_", label, ".csv")),
+    row.names = FALSE
+  )
+
+  write.csv(
+    pred_mat,
+    file.path(output_dir, paste0("multinomial_pred_", label, ".csv")),
+    row.names = FALSE
+  )
+}
+```
+
+```{r}
+cat("Running categorical multinomial model...\n")
+run_multinomial(X_cat, y_cat, "cat")
+```
+
+```{r}
+cat("Running numeric multinomial model...\n")
+run_multinomial(X_num, y_num, "num")
+```
+
