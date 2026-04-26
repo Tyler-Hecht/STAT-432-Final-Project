@@ -13,13 +13,13 @@ OUTPUT_NUM = "../data/ordered_logistic/pred_num.csv"
 
 df_cat = read.csv(CATEGORICAL_FILE)
 X_cat = df_cat[,-11]
-X_cat = model.matrix(~ age + gender + education + country + ethnicity - 1, X_cat)
+X_cat = model.matrix(~ . - 1, X_cat)
 y_cat = df_cat[,11]
 y_cat = as.ordered(y_cat)
 
 df_num = read.csv(NUMERICAL_FILE)
 X_num = df_num[,-11]
-X_num = model.matrix(~ gender + country + ethnicity - 1, X_num)
+X_num = model.matrix(~ . - 1, X_num)
 y_num = df_num[,11]
 y_num = as.ordered(y_num)
 
@@ -41,8 +41,6 @@ folds = split(1:n, sample(rep(1:nfolds, each = n / nfolds)))
 
 ```{r}
 pb <- txtProgressBar(min = 0, max = nfolds, style = 3)
-
-folds = split(1:n, sample(rep(1:nfolds, each = n / nfolds)))
 
 pred_cat = array(NA, dim = c(L, A, n))
 for (i in 1:nfolds) {
