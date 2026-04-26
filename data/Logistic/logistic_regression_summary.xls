@@ -1,5 +1,0 @@
-model,data_version,best_parameter,accuracy,tc
-Ordered Logit,Numeric,N/A,0.42917771883289124,2881.2093215369437
-Ordered Logit,Categorical,N/A,0.413262599469496,2929.0014555600196
-Multinomial Logistic,Numeric,0.01,0.43183023872679044,2980.9443362267766
-Multinomial Logistic,Categorical,0.01,0.41379310344827586,3031.4274141968963
