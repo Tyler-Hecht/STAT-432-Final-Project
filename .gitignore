@@ -1,5 +1,7 @@
 code/visualize_targets.ipynb
 code/check_data.ipynb
+code/array_to_latex.py
+code/my_logistic.rmd
 **/__pycache__
 **/.RData
 **/.Rhistory
